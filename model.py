@@ -11,12 +11,15 @@ class Model:
   def __init__(self, dists):
     self.dists = dists
 
-  def getNextNoteDistribution(self, evidence):
+  def getNextNoteDistribution(self, state):
     """
     Returns a probability distribution for the next note,
-    based on the evidence 
+    based on the current state (song so far) 
     """
-    return self.dists[evidence]
+    return self.dists[self.getEvidenceFromState(state)]
+
+  def getEvidenceFromState(self, state):
+    return state[-1]
 
   @staticmethod
   def toModelNote(note):
@@ -25,8 +28,16 @@ class Model:
     return modelNote
 
 class BasicModel(Model):
-  def getNextNoteDistribution(self, evidence):
+  def getNextNoteDistribution(self, state):
     return self.dists
+
+class NStepModel(Model):
+  def __init__(self, dists, numSteps = 1):
+    self.dists = dists
+    self.numSteps = numSteps
+
+  def getEvidenceFromState(self, state):
+    return tuple(state[-self.numSteps:])
 
 class ModelCreator:
   def __init__(self, modelCls = Model):
@@ -71,7 +82,6 @@ class ModelCreator:
       for note in song:
         normalizedSong.append(self.modelCls.toModelNote(note))
       
-      # song.insert(-1, Note.startOfSong)
       normalizedSong.append(Note.endOfSong)
       normalized.append(normalizedSong) 
     return normalized
@@ -87,6 +97,32 @@ class BasicModelCreator(ModelCreator):
           noteDist[note] += 1
 
     model = self.modelCls(noteDist)
+    return model
+
+class NStepModelCreator(ModelCreator):
+  def __init__(self, modelCls = NStepModel, numSteps = 1):
+    self.modelCls = modelCls
+    self.numSteps = numSteps
+
+  def createModel(self, corpus, laplace = 0):
+    """
+    Creates and returns a model, given a corpus.
+    
+    Assumes that each song in the corpus contains at least one note.
+    """
+    noteDists = collections.defaultdict(util.Counter)
+    # Go through each song, adding to the count for P(next note|note)
+    for song in corpus:
+      previousNotes = []
+      for note in song:
+        if len(previousNotes) > 0:
+          noteDists[tuple(previousNotes)][note] += 1
+
+        if len(previousNotes) == self.numSteps:
+          previousNotes.pop(0)
+        previousNotes.append(note)
+
+    model = self.modelCls(noteDists, self.numSteps)
     return model
 
 class Predictor:
@@ -120,7 +156,7 @@ class Predictor:
     if not self.state:
       return self.getStartNoteDistribution()
 
-    nextNoteDist = self.model.getNextNoteDistribution(self.state[-1])
+    nextNoteDist = self.model.getNextNoteDistribution(self.state)
     return nextNoteDist
 
   def setNextNote(self, note):
@@ -188,7 +224,7 @@ class Tester():
   def getTrainError(self, model, trainSet):
     return self.testModel(model, trainSet)[2]
 
-  def testModel(self, model, testSet):
+  def testModel(self, model, testSet, predictorCls = Predictor):
     """
     Tests the model on the testSet.
 
@@ -196,7 +232,7 @@ class Tester():
 
     Assumes every song has a first note.
     """
-    predictor = Predictor(model)
+    predictor = predictorCls(model)
     correct_count = 0
     incorrect_count = 0
     for song in testSet:

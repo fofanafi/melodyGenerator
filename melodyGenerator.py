@@ -11,18 +11,21 @@ def main():
   parser.add_argument('-d', '--debug', action='store_true',
                     help='debug model')
   parser.add_argument('-m', '--model', default='one',
-                    help='specify the model typei, basic or one')
+                    help='specify the model type, basic, one or numSteps as an integer N. Defaults to one')
   parser.add_argument('-c', '--corpus', default='bach',
-                    help='specify the corpus, bach or pop')
+                    help='specify the corpus, bach or pop. Defaults to bach')
 
   args = parser.parse_args()
 
   if args.model == 'basic':
     print "Model: Basic"
     modelCreator = BasicModelCreator()
-  else:
+  elif args.model == 'one':
     print "Model: One-step lookahead"
     modelCreator = ModelCreator()
+  else:
+    print "Model: N-step"
+    modelCreator = NStepModelCreator(numSteps = int(args.model))
 
   print "Loading corpus..."
   if args.corpus == 'bach':
@@ -49,12 +52,12 @@ def debugTest(modelCreator):
   corpus = bachChorales.loadOneMelody()
   corpus[0].show()
   corpus = modelCreator.normalizeCorpus(corpus)
-  # corpus[0].show("text")
 
   tester = Tester(corpus, modelCreator)
 
   model = modelCreator.createModel(corpus)
   print model.dists
+  print "(correct count, incorrect count, error)"
   print tester.testModel(model, corpus)
 
 def generateSong(model, seed = 0):

@@ -103,7 +103,6 @@ def loadMelodies():
     return melodies
 
 def createPickle():
-
     loadMelodies()
     # melodies[i].show('musicxml')
     # messing with pickling
